@@ -17,6 +17,7 @@ Demo có 2 luồng chính
 + Gửi Email có đơn hàng mới về email của admin
 
 2. Xử lý đơn treo
+
 2.1 Order Service:
 + Tạo đơn và gửi OrderCreatedEvent như bình thường
 
