@@ -1,7 +1,7 @@
 package com.example.payment_service.config;
 
 import com.example.payment_service.entity.PaymentEntity;
-import com.example.payment_service.model.dto.PaymentCompletedEvent;
+import com.example.payment_service.model.dto.PaymentStatusEvent;
 import com.example.payment_service.repository.PaymentRepository;
 import com.github.kagkarlsson.scheduler.task.Task;
 import com.github.kagkarlsson.scheduler.task.helper.Tasks;
@@ -28,21 +28,21 @@ public class PaymentJobConfig {
 
     @Bean
     public Task<Void> paymentCleanupTask() {
-        return Tasks.recurring("cleanup-pending-payments", FixedDelay.ofMinutes(1)) // Chạy mỗi 1 phút
+        return Tasks.recurring("cleanup-pending-payments", FixedDelay.ofMinutes(3)) // 3 phút chạy 1 lần
                 .execute((instance, context) -> {
-                    System.out.println("db-scheduler: Bắt đầu quét đơn treo...");
+                    System.out.println("Bắt đầu quét đơn treo");
 
                     // Tìm đơn PENDING quá 2 phút
                     LocalDateTime threshold = LocalDateTime.now().minusMinutes(2);
                     List<PaymentEntity> stuckPayments = paymentRepository.findByStatusAndCreatedAtBefore("PENDING", threshold);
 
                     for (PaymentEntity p : stuckPayments) {
-                        // Đổi trạng thái -> CANCELLED
+                        // Đổi trạng thái sang CANCELLED
                         p.setStatus("CANCELLED");
                         paymentRepository.save(p);
 
                         //Gửi event PaymentFailed sang Kafka
-                        PaymentCompletedEvent failedEvent = new PaymentCompletedEvent();
+                        PaymentStatusEvent failedEvent = new PaymentStatusEvent();
                         failedEvent.setOrderId(p.getOrderId());
                         failedEvent.setAmount(p.getAmount());
                         failedEvent.setStatus(p.getStatus());

@@ -2,13 +2,12 @@ package com.example.payment_service.service.impl;
 
 import com.example.payment_service.entity.PaymentEntity;
 import com.example.payment_service.model.dto.OrderCreatedEvent;
-import com.example.payment_service.model.dto.PaymentCompletedEvent;
+import com.example.payment_service.model.dto.PaymentStatusEvent;
 import com.example.payment_service.repository.PaymentRepository;
 import com.example.payment_service.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +23,7 @@ public class PaymentServiceImpl implements PaymentService {
     private KafkaTemplate<String, Object> kafkaTemplate;
 
     private final String PAYMENT_COMPLETED_TOPIC = "payment.completed";
+    private final String PAYMENT_FAILED_TOPIC = "payment.failed";
 
     @Override
     @Transactional
@@ -43,9 +43,19 @@ public class PaymentServiceImpl implements PaymentService {
         p.setStatus("PENDING");
         paymentRepository.save(p);
 
+        //test fail
+//        if (true) {
+//            System.out.println("DEMO: Giả lập user không thanh toán -> Giữ nguyên trạng thái PENDING");
+//            PaymentStatusEvent failedEvent = new PaymentStatusEvent(orderId, p.getAmount(), p.getStatus());
+//            kafkaTemplate.send(PAYMENT_FAILED_TOPIC, failedEvent);
+//            return;
+//        }
+
         //Ramdom success hoặc failed
         if (Math.random() < 0.5) {
-            System.out.println("DEMO: Giả lập user không thanh toán -> Giữ nguyên PENDING");
+            System.out.println("DEMO: Giả lập user không thanh toán -> Giữ nguyên trạng thái PENDING");
+            PaymentStatusEvent failedEvent = new PaymentStatusEvent(orderId, p.getAmount(), p.getStatus());
+            kafkaTemplate.send(PAYMENT_FAILED_TOPIC, failedEvent);
             return;
         }
 
@@ -54,7 +64,7 @@ public class PaymentServiceImpl implements PaymentService {
         paymentRepository.save(p);
 
         // Publish payment.completed event
-        PaymentCompletedEvent completed = new PaymentCompletedEvent();
+        PaymentStatusEvent completed = new PaymentStatusEvent();
         completed.setOrderId(orderId);
         completed.setAmount(p.getAmount());
         completed.setStatus(p.getStatus());

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class PaymentCompletedConsumer {
+public class PaymentStatusConsumer {
 
     @Autowired
     private MailService mailService;

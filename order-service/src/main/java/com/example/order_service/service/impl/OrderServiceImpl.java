@@ -2,13 +2,16 @@ package com.example.order_service.service.impl;
 
 import com.example.order_service.entity.OrderDetailEntity;
 import com.example.order_service.entity.OrderEntity;
+import com.example.order_service.entity.ProductEntity;
 import com.example.order_service.kafka.OrderProducer;
-import com.example.order_service.model.OrderCreatedEvent;
+import com.example.order_service.model.event.OrderStatusEvent;
 import com.example.order_service.model.OrderDTO;
 import com.example.order_service.model.OrderDetailDTO;
 import com.example.order_service.repository.OrderDetailRepository;
 import com.example.order_service.repository.OrderRepository;
+import com.example.order_service.repository.ProductRepository;
 import com.example.order_service.service.OrderService;
+import com.example.order_service.service.ProductService;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,10 +31,16 @@ public class OrderServiceImpl implements OrderService {
     private OrderRepository orderRepository;
 
     @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
     private OrderProducer orderProducer;
 
     @Autowired
     private OrderDetailRepository orderDetailRepository;
+
+    @Autowired
+    private ProductService productService;
 
     @Override
     @Transactional
@@ -39,10 +48,22 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity orderEntity = mapper.map(orderDTO,OrderEntity.class);
         orderEntity.setUserId(orderDTO.getUserId());
         orderEntity.setCreatedAt(LocalDateTime.now());
+        orderEntity.setStatus("PENDING");
         BigDecimal totalAmount = BigDecimal.valueOf(0);
         List<OrderDetailEntity> detailEntities = new ArrayList<>();
 
         for(OrderDetailDTO d : orderDTO.getOrderDetails()){
+            //kiểm tra kho và trừ số lượng
+            ProductEntity productEntity = productRepository.findById(d.getProductId())
+                    .orElseThrow(() -> new RuntimeException("Sản phẩm không tồn tại"));
+
+            if(productEntity.getStockQuantity() < d.getQuantity()){
+                throw new RuntimeException("Hết hàng: " + productEntity.getName());
+            }
+
+            productEntity.setStockQuantity(productEntity.getStockQuantity() - d.getQuantity());
+            productRepository.save(productEntity);
+
             BigDecimal lineTotal = d.getUnitPrice().multiply(BigDecimal.valueOf(d.getQuantity()));
 
             OrderDetailEntity detail = new OrderDetailEntity();
@@ -70,7 +91,7 @@ public class OrderServiceImpl implements OrderService {
 
         orderDetailRepository.saveAll(detailEntities);
 
-        OrderCreatedEvent event = new OrderCreatedEvent();
+        OrderStatusEvent event = new OrderStatusEvent();
         event.setOrderId(orderEntity.getId());
         event.setUserId(orderEntity.getUserId());
         event.setTotalAmount(orderEntity.getTotalPrice());
@@ -78,5 +99,21 @@ public class OrderServiceImpl implements OrderService {
         orderProducer.sendOrderCreatedEvent(event);
 
         return orderDTO;
+    }
+
+    //roll back lại số lượng sản phẩm của đơn hàng
+    @Override
+    @Transactional
+    public void rollBackQuantity(Long orderId) {
+        OrderEntity order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if ("PENDING".equals(order.getStatus())) {
+            for (OrderDetailEntity detail : order.getOrderDetails()) {
+                productService.restoreStock(detail.getProductId(), detail.getQuantity());
+            }
+            order.setStatus("CANCELLED");
+            orderRepository.save(order);
+        }
     }
 }

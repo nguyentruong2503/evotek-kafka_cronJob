@@ -24,16 +24,15 @@ public class OrderEntity {
 
     @Column(name = "total_amount", nullable = false)
     private BigDecimal totalPrice;
+
+    @Column(name = "status")
+    private String status;
+
     @CreatedDate
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
     private List<OrderDetailEntity> orderDetails = new ArrayList<>();
-
-    public void addDetail(OrderDetailEntity detail) {
-        orderDetails.add(detail);
-        detail.setOrder(this);
-    }
 
 }
